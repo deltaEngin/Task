@@ -45,7 +45,7 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.03);
     }
     .table-scroll table {
-      min-width: 800px; /* largeur minimum pour forcer le défilement sur petit écran */
+      min-width: 800px;
       margin-bottom: 0;
     }
     .form-check-input { cursor: pointer; width: 1.2rem; height: 1.2rem; }
@@ -157,7 +157,7 @@
   </div>
 </div>
 
-<!-- Modal Nouvelle tâche -->
+<!-- Modals inchangés -->
 <div class="modal fade" id="newTaskModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -195,7 +195,6 @@
   </div>
 </div>
 
-<!-- Modal Modification tâche -->
 <div class="modal fade" id="editTaskModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -219,7 +218,6 @@
   </div>
 </div>
 
-<!-- Modal Graphique -->
 <div class="modal fade" id="chartModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
@@ -229,7 +227,6 @@
   </div>
 </div>
 
-<!-- Modal PIN -->
 <div class="modal fade" id="pinModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content">
@@ -243,7 +240,6 @@
   </div>
 </div>
 
-<!-- Toasts -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="notificationToast" class="toast align-items-center text-white bg-success border-0">
     <div class="d-flex"><div class="toast-body" id="toastMessage"></div><button class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>
@@ -336,12 +332,13 @@
         <div class="d-flex justify-content-center gap-2 flex-wrap">
           <button class="btn btn-outline-secondary btn-sm show-chart-btn"><i class="fas fa-chart-bar me-1"></i>Graphique</button>
           <button class="btn btn-outline-secondary btn-sm edit-task-btn"><i class="fas fa-pen"></i></button>
-          <button class="btn btn-outline-danger btn-sm delete-task-btn"><i class="fas fa-trash"></i></button>
+          <!-- Bouton de suppression retiré pour les employés -->
         </div>
       </div>`;
     return div;
   }
 
+  // Le reste du code est identique, sans l'écouteur sur delete-task-btn
   async function loadAndRenderTasks() {
     const container = document.getElementById('tasksContainer');
     container.innerHTML = '<div class="col-12 text-center py-3"><div class="spinner-border text-primary"></div></div>';
@@ -396,13 +393,7 @@
           new bootstrap.Modal(document.getElementById('editTaskModal')).show();
         }
       });
-      card.querySelector('.delete-task-btn').addEventListener('click', async () => {
-        if (!confirm('Supprimer définitivement cette tâche et son historique ?')) return;
-        await supabaseClient.from('tasks').delete().eq('id', taskId);
-        showToast('Tâche supprimée', 'success');
-        await loadAndRenderTasks();
-        if (isManager) await renderManagerDashboard();
-      });
+      // Aucun écouteur pour delete-task-btn car le bouton n'existe plus
     });
   }
 
@@ -547,7 +538,6 @@
     filtered.forEach(task => {
       const pct = task.target_quantity>0 ? Math.round((task.accomplished/task.target_quantity)*100) : 0;
       const status = task.accomplished >= task.target_quantity ? 'Terminée' : 'En cours';
-      // Utilisation d'une checkbox pour le paiement
       const checkedAttr = task.paid ? 'checked' : '';
       tbody.innerHTML += `
         <tr>
@@ -569,30 +559,25 @@
         </tr>`;
     });
 
-    // Événements checkbox paiement
     document.querySelectorAll('.paid-checkbox').forEach(cb => {
       cb.addEventListener('change', async (e) => {
         const id = cb.dataset.id;
         const newPaid = cb.checked;
         const label = cb.parentElement.querySelector('.form-check-label');
-        // Mise à jour immédiate de l'interface
         label.textContent = newPaid ? 'Payé' : 'Non payé';
-        // Mise à jour dans Supabase
         const { error } = await supabaseClient.from('tasks').update({ paid: newPaid }).eq('id', id);
         if (error) {
           showToast('Erreur lors de la mise à jour', 'danger');
-          cb.checked = !newPaid; // annuler visuellement
+          cb.checked = !newPaid;
           label.textContent = !newPaid ? 'Payé' : 'Non payé';
         } else {
           showToast(newPaid ? 'Marqué payé' : 'Marqué non payé', 'success');
-          // Mettre à jour allTasksData localement pour que les filtres restent cohérents
           const taskInData = allTasksData.find(t => t.id === id);
           if (taskInData) taskInData.paid = newPaid;
         }
       });
     });
 
-    // Suppression
     document.querySelectorAll('.delete-task-manager').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = btn.dataset.id;
