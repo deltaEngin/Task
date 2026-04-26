@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
+  <title>Suivi de production</title>
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- Font Awesome (icônes) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    :root {
+      --bs-primary: #0d6efd;
+    }
+    body {
+      background-color: #f8f9fa;
+      padding-bottom: 20px;
+    }
+    .navbar {
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .task-card {
+      margin-bottom: 1.5rem;
+      border: none;
+      border-radius: 15px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+      transition: transform 0.2s;
+    }
+    .task-card:hover {
+      transform: translateY(-3px);
+    }
+    .task-completed {
+      opacity: 0.7;
+      background-color: #e9f7ef;
+      border-left: 5px solid #198754;
+    }
+    .gauge-container {
+      margin: 0 auto 1rem;
+      width: 130px;
+      height: 130px;
+    }
+    .circular-chart {
+      width: 100%;
+      height: 100%;
+    }
+    .circle-bg {
+      fill: none;
+      stroke: #eee;
+      stroke-width: 3.8;
+    }
+    .circle {
+      fill: none;
+      stroke: var(--bs-primary);
+      stroke-width: 3.8;
+      stroke-linecap: round;
+      transition: stroke-dasharray 0.4s ease;
+    }
+    .percentage {
+      font-size: 0.5em;
+      text-anchor: middle;
+      fill: #333;
+      font-weight: bold;
+    }
+    .remaining-text {
+      font-size: 0.9rem;
+      color: #6c757d;
+    }
+    .filters {
+      background: white;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .list-group-item {
+      cursor: pointer;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      background: white;
+      border-radius: 15px;
+      color: #6c757d;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-3">
+  <div class="container">
+    <a class="navbar-brand" href="#">
+      <i class="fas fa-industry me-2"></i>TaskProd
+    </a>
+    <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#newTaskModal">
+      <i class="fas fa-plus-circle me-1"></i> Nouvelle tâche
+    </button>
+  </div>
+</nav>
+
+<div class="container">
+  <!-- Filtres -->
+  <div class="filters row g-2 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label fw-semibold">Employé</label>
+      <select id="filterEmployee" class="form-select">
+        <option value="">Tous</option>
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label fw-semibold">Statut</label>
+      <select id="filterStatus" class="form-select">
+        <option value="">Tous</option>
+        <option value="in_progress">En cours</option>
+        <option value="completed">Terminée</option>
+      </select>
+    </div>
+    <div class="col-md-4 text-end">
+      <button class="btn btn-outline-secondary" id="syncBtn" title="Synchroniser les données hors ligne">
+        <i class="fas fa-sync-alt"></i> Sync
+      </button>
+    </div>
+  </div>
+
+  <!-- Zone d'affichage des tâches -->
+  <div id="tasksContainer" class="row">
+    <!-- Rempli dynamiquement -->
+    <div class="col-12 empty-state">
+      <i class="fas fa-inbox fa-3x mb-2 text-muted"></i>
+      <h5>Aucune tâche pour le moment</h5>
+      <p>Créez une nouvelle tâche pour commencer le suivi.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nouvelle tâche -->
+<div class="modal fade" id="newTaskModal" tabindex="-1" aria-labelledby="newTaskModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="fas fa-plus-circle me-1"></i>Nouvelle tâche</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Nom complet de l'employé *</label>
+          <input type="text" id="newEmployeeName" class="form-control" required />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Nom de l'article (optionnel)</label>
+          <input type="text" id="newArticleName" class="form-control" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Quantité cible *</label>
+          <input type="number" id="newTargetQuantity" class="form-control" min="1" required />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary" id="createTaskBtn">Créer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Graphique -->
+<div class="modal fade" id="chartModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Historique de production</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <canvas id="productionChart" width="400" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts pour notifications -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="notificationToast" class="toast align-items-center text-white bg-success border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="toastMessage"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts CDN -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+  // ⚠️ REMPLACEZ AVEC VOS PROPRES VALEURS
+  const SUPABASE_URL = 'https://pfdhfkbuhaecaakvyagp.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmZGhma2J1aGFlY2Fha3Z5YWdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyNDM0NzksImV4cCI6MjA4ODgxOTQ3OX0.bMZ9Y61ZWnMCXQEXYtAoYOP2sJKxpBE2L59T2nCU4EY';
+  
+  // Initialisation Supabase (variable renommée pour éviter conflit)
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Configuration localForage pour le mode hors ligne
+  localforage.config({
+    name: 'taskProd',
+    storeName: 'offline_store'
+  });
+
+  // Variables globales
+  let tasksData = []; // cache des tâches avec leurs totaux
+  let chartInstance = null; // pour éviter les doublons de graphique
+
+  // ---------------------------
+  // Fonctions utilitaires
+  // ---------------------------
+  function showToast(message, type = 'success') {
+    const toast = document.getElementById('notificationToast');
+    const toastMessage = document.getElementById('toastMessage');
+    toastMessage.textContent = message;
+    toast.classList.remove('bg-success', 'bg-warning', 'bg-danger');
+    toast.classList.add(`bg-${type}`);
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+  }
+
+  // Calcul du total accompli pour une tâche (depuis les logs en cache ou base)
+  async function getTaskAccomplished(taskId) {
+    // D'abord vérifier si nous avons des données en cache
+    const { data: logs, error } = await supabaseClient
+      .from('task_logs')
+      .select('quantity_added')
+      .eq('task_id', taskId);
+    if (error) {
+      console.error('Erreur récupération logs', error);
+      return 0;
+    }
+    return logs.reduce((sum, log) => sum + log.quantity_added, 0);
+  }
+
+  // Mise à jour de la jauge SVG pour une carte
+  function updateGauge(cardElement, accomplished, target) {
+    const percent = target > 0 ? Math.min(100, Math.round((accomplished / target) * 100)) : 0;
+    const remaining = Math.max(0, target - accomplished);
+    const circle = cardElement.querySelector('.circle');
+    const percentageText = cardElement.querySelector('.percentage');
+    const remainingEl = cardElement.querySelector('.remaining');
+    
+    circle.setAttribute('stroke-dasharray', `${percent}, 100`);
+    percentageText.textContent = `${percent}%`;
+    remainingEl.textContent = remaining;
+
+    // Gestion du statut "terminée"
+    if (remaining <= 0) {
+      cardElement.classList.add('task-completed');
+      cardElement.querySelector('.add-btn').disabled = true;
+      cardElement.querySelector('.quantity-input').disabled = true;
+      // Notification si vient de passer à 100%
+      if (percent === 100 && !cardElement.dataset.completedNotified) {
+        showToast('🎉 Objectif atteint !', 'success');
+        cardElement.dataset.completedNotified = 'true';
+      }
+    } else {
+      cardElement.classList.remove('task-completed');
+      cardElement.querySelector('.add-btn').disabled = false;
+      cardElement.querySelector('.quantity-input').disabled = false;
+      cardElement.dataset.completedNotified = '';
+    }
+  }
+
+  // Affichage du graphique pour une tâche
+  async function showChart(taskId) {
+    const { data: logs, error } = await supabaseClient
+      .from('task_logs')
+      .select('quantity_added, created_at')
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: true });
+    
+    if (error) {
+      console.error(error);
+      showToast('Erreur chargement historique', 'danger');
+      return;
+    }
+
+    // Regrouper par jour
+    const dailyMap = new Map();
+    logs.forEach(log => {
+      const day = new Date(log.created_at).toISOString().slice(0, 10);
+      dailyMap.set(day, (dailyMap.get(day) || 0) + log.quantity_added);
+    });
+
+    const labels = Array.from(dailyMap.keys());
+    const data = Array.from(dailyMap.values());
+
+    const ctx = document.getElementById('productionChart').getContext('2d');
+    
+    // Détruire le précédent graphique s'il existe
+    if (chartInstance) {
+      chartInstance.destroy();
+    }
+    
+    chartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Quantité produite par jour',
+          data: data,
+          backgroundColor: '#0d6efd',
+          borderRadius: 5
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { stepSize: 1 }
+          }
+        }
+      }
+    });
+
+    // Ouvrir le modal
+    const chartModal = new bootstrap.Modal(document.getElementById('chartModal'));
+    chartModal.show();
+  }
+
+  // Créer la carte HTML d'une tâche (sans les données dynamiques)
+  function createTaskCard(task) {
+    const card = document.createElement('div');
+    card.className = 'col-12 col-md-6 col-lg-4';
+    card.innerHTML = `
+      <div class="card task-card" data-task-id="${task.id}" data-completed-notified="">
+        <div class="card-body text-center">
+          <h5 class="card-title">${escapeHtml(task.employee_name)}</h5>
+          <h6 class="card-subtitle mb-2 text-muted">${task.article_name ? escapeHtml(task.article_name) : '—'}</h6>
+          <div class="gauge-container">
+            <svg viewBox="0 0 36 36" class="circular-chart">
+              <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path class="circle" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <text x="18" y="20.35" class="percentage">0%</text>
+            </svg>
+          </div>
+          <p class="remaining-text">Restant : <span class="remaining">${task.target_quantity}</span></p>
+          <div class="input-group mb-2">
+            <input type="number" class="form-control quantity-input" placeholder="Qté" min="1" value="1">
+            <button class="btn btn-primary add-btn"><i class="fas fa-plus"></i></button>
+          </div>
+          <button class="btn btn-outline-secondary btn-sm show-chart-btn">
+            <i class="fas fa-chart-bar me-1"></i>Graphique
+          </button>
+        </div>
+      </div>
+    `;
+    return card;
+  }
+
+  // Échapper les caractères HTML
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // Charger et afficher toutes les tâches
+  async function loadAndRenderTasks() {
+    const container = document.getElementById('tasksContainer');
+    container.innerHTML = '<div class="col-12 text-center py-3"><div class="spinner-border text-primary"></div></div>';
+
+    // Récupérer toutes les tâches
+    const { data: tasks, error } = await supabaseClient
+      .from('tasks')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      container.innerHTML = '<div class="col-12 alert alert-danger">Erreur de chargement des tâches.</div>';
+      console.error(error);
+      return;
+    }
+
+    tasksData = tasks || [];
+
+    // Appliquer les filtres
+    const employeeFilter = document.getElementById('filterEmployee').value;
+    const statusFilter = document.getElementById('filterStatus').value;
+
+    let filteredTasks = [...tasksData];
+    if (employeeFilter) {
+      filteredTasks = filteredTasks.filter(t => t.employee_name === employeeFilter);
+    }
+
+    // Pour chaque tâche, calculer le total accompli (async)
+    const tasksWithProgress = await Promise.all(
+      filteredTasks.map(async (task) => {
+        const accomplished = await getTaskAccomplished(task.id);
+        return { ...task, accomplished };
+      })
+    );
+
+    // Appliquer filtre statut
+    if (statusFilter === 'in_progress') {
+      filteredTasks = tasksWithProgress.filter(t => t.accomplished < t.target_quantity);
+    } else if (statusFilter === 'completed') {
+      filteredTasks = tasksWithProgress.filter(t => t.accomplished >= t.target_quantity);
+    } else {
+      filteredTasks = tasksWithProgress;
+    }
+
+    // Vider le conteneur
+    container.innerHTML = '';
+
+    if (filteredTasks.length === 0) {
+      container.innerHTML = `
+        <div class="col-12 empty-state">
+          <i class="fas fa-inbox fa-3x mb-2 text-muted"></i>
+          <h5>Aucune tâche trouvée</h5>
+          <p>Essayez de modifier les filtres ou créez une nouvelle tâche.</p>
+        </div>`;
+      return;
+    }
+
+    // Créer les cartes
+    filteredTasks.forEach(task => {
+      const card = createTaskCard(task);
+      container.appendChild(card);
+      const cardEl = card.querySelector('.task-card');
+      updateGauge(cardEl, task.accomplished, task.target_quantity);
+    });
+
+    // Attacher les événements après avoir créé toutes les cartes
+    attachCardEvents();
+
+    // Mettre à jour la liste des employés pour le filtre
+    updateEmployeeFilter();
+  }
+
+  // Attacher les événements sur les cartes (ajout, graphique)
+  function attachCardEvents() {
+    document.querySelectorAll('.task-card').forEach(card => {
+      // Éviter les doublons d'écouteurs
+      if (card.dataset.eventsAttached === 'true') return;
+      card.dataset.eventsAttached = 'true';
+
+      const taskId = card.dataset.taskId;
+      const addBtn = card.querySelector('.add-btn');
+      const quantityInput = card.querySelector('.quantity-input');
+      const chartBtn = card.querySelector('.show-chart-btn');
+
+      addBtn.addEventListener('click', async () => {
+        const quantity = parseInt(quantityInput.value);
+        if (!quantity || quantity < 1) {
+          showToast('Veuillez entrer une quantité valide', 'warning');
+          return;
+        }
+        await addLogAndUpdate(taskId, quantity);
+        quantityInput.value = 1; // reset
+      });
+
+      chartBtn.addEventListener('click', () => {
+        showChart(taskId);
+      });
+    });
+  }
+
+  // Ajouter un log et mettre à jour l'affichage
+  async function addLogAndUpdate(taskId, quantity) {
+    // Sauvegarder en ligne
+    if (navigator.onLine) {
+      const { error } = await supabaseClient
+        .from('task_logs')
+        .insert([{ task_id: taskId, quantity_added: quantity }]);
+      if (error) {
+        showToast('Erreur d\'enregistrement', 'danger');
+        console.error(error);
+        return;
+      }
+      showToast(`${quantity} ajouté(s)`, 'success');
+    } else {
+      // Mode hors ligne : stocker dans localForage
+      const pendingLogs = await localforage.getItem('pendingLogs') || [];
+      pendingLogs.push({ task_id: taskId, quantity_added: quantity, created_at: new Date().toISOString() });
+      await localforage.setItem('pendingLogs', pendingLogs);
+      showToast('Stocké localement (synchronisation nécessaire)', 'info');
+    }
+
+    // Recharger les tâches pour refléter la mise à jour
+    await loadAndRenderTasks();
+  }
+
+  // Créer une nouvelle tâche
+  async function createNewTask() {
+    const employee = document.getElementById('newEmployeeName').value.trim();
+    const article = document.getElementById('newArticleName').value.trim();
+    const target = parseInt(document.getElementById('newTargetQuantity').value);
+
+    if (!employee || !target || target < 1) {
+      showToast('Veuillez remplir tous les champs obligatoires', 'warning');
+      return;
+    }
+
+    const { error } = await supabaseClient
+      .from('tasks')
+      .insert([{ employee_name: employee, article_name: article || null, target_quantity: target }]);
+
+    if (error) {
+      showToast('Erreur lors de la création', 'danger');
+      console.error(error);
+      return;
+    }
+
+    // Fermer le modal et recharger
+    const modal = bootstrap.Modal.getInstance(document.getElementById('newTaskModal'));
+    modal.hide();
+    document.getElementById('newEmployeeName').value = '';
+    document.getElementById('newArticleName').value = '';
+    document.getElementById('newTargetQuantity').value = '';
+    showToast('Tâche créée avec succès !', 'success');
+    await loadAndRenderTasks();
+  }
+
+  // Mise à jour du filtre des employés
+  function updateEmployeeFilter() {
+    const select = document.getElementById('filterEmployee');
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">Tous</option>';
+    const employees = [...new Set(tasksData.map(t => t.employee_name))].sort();
+    employees.forEach(name => {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+    select.value = currentVal;
+  }
+
+  // Synchronisation des logs hors ligne
+  async function syncOfflineData() {
+    if (!navigator.onLine) {
+      showToast('Aucune connexion internet', 'warning');
+      return;
+    }
+    const pendingLogs = await localforage.getItem('pendingLogs') || [];
+    if (pendingLogs.length === 0) {
+      showToast('Aucune donnée en attente', 'info');
+      return;
+    }
+
+    for (const log of pendingLogs) {
+      const { error } = await supabaseClient.from('task_logs').insert([log]);
+      if (error) {
+        console.error('Erreur synchro log', error);
+        showToast('Erreur lors de la synchronisation', 'danger');
+        return;
+      }
+    }
+    await localforage.setItem('pendingLogs', []);
+    showToast('Synchronisation terminée !', 'success');
+    await loadAndRenderTasks();
+  }
+
+  // ---------------------------
+  // Événements et initialisation
+  // ---------------------------
+  document.addEventListener('DOMContentLoaded', () => {
+    // Charger les tâches au démarrage
+    loadAndRenderTasks();
+
+    // Bouton création de tâche
+    document.getElementById('createTaskBtn').addEventListener('click', createNewTask);
+
+    // Bouton synchronisation manuelle
+    document.getElementById('syncBtn').addEventListener('click', syncOfflineData);
+
+    // Filtres
+    document.getElementById('filterEmployee').addEventListener('change', loadAndRenderTasks);
+    document.getElementById('filterStatus').addEventListener('change', loadAndRenderTasks);
+
+    // Événements online/offline
+    window.addEventListener('online', () => {
+      showToast('Connexion rétablie - synchronisation automatique', 'success');
+      syncOfflineData();
+    });
+    window.addEventListener('offline', () => {
+      showToast('Mode hors ligne activé', 'warning');
+    });
+
+    // Fermer le graphique quand le modal est caché (pour détruire le canvas proprement)
+    document.getElementById('chartModal').addEventListener('hidden.bs.modal', () => {
+      if (chartInstance) {
+        chartInstance.destroy();
+        chartInstance = null;
+      }
+    });
+  });
+</script>
+</body>
+</html>
